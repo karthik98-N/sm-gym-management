@@ -144,19 +144,30 @@ const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
           </div>
 
           <div className="form-group upload-section mt-2">
-            <label>Payment Screenshot (Local Storage Demo)</label>
-            <div className="upload-box">
+            <label>Payment Screenshot</label>
+            <div className="upload-box" style={{ border: preview ? 'none' : '' }}>
               <input type="file" id="file" accept="image/*" onChange={handleFileChange} hidden />
-              <label htmlFor="file" className="upload-label flex flex-col align-center text-dim">
-                {preview ? (
-                  <img src={preview.previewUrl || preview} alt="Preview" className="preview-img" />
-                ) : (
-                  <>
-                    <FaCamera size={30} className="mb-1 text-primary" />
-                    <span>Click to Select File</span>
-                  </>
-                )}
-              </label>
+              <input type="file" id="camera" accept="image/*" capture="environment" onChange={handleFileChange} hidden />
+              
+              {preview ? (
+                <div className="flex flex-col align-center">
+                  <img src={preview.previewUrl || preview} alt="Preview" className="preview-img" style={{ maxHeight: '180px' }} />
+                  <div className="flex gap-1 mt-1 justify-center p-1">
+                     <button type="button" className="btn btn-danger" onClick={() => setPreview(null)}>Clear Image</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-1" style={{ height: '100%' }}>
+                  <label htmlFor="file" className="upload-label flex flex-col align-center text-dim" style={{ flex: 1, borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                    <FaCamera size={26} className="mb-1 text-primary" />
+                    <span style={{ fontSize: '0.9rem' }}>Upload Pic</span>
+                  </label>
+                  <label htmlFor="camera" className="upload-label flex flex-col align-center text-dim" style={{ flex: 1 }}>
+                    <FaCamera size={26} className="mb-1 text-primary" />
+                    <span style={{ fontSize: '0.9rem' }}>Take Photo</span>
+                  </label>
+                </div>
+              )}
             </div>
           </div>
 
