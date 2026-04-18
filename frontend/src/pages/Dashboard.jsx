@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import MemberModal from '../components/MemberModal';
-import { FaPlus, FaSearch, FaEdit, FaTrash, FaSpinner } from 'react-icons/fa';
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaSpinner, FaFileImage, FaTimes } from 'react-icons/fa';
 import './Dashboard.css';
 
 // Connected to Google Apps Script
@@ -13,6 +13,7 @@ const Dashboard = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null); // For Lightbox
 
   useEffect(() => {
     fetchMembers();
@@ -97,6 +98,39 @@ const Dashboard = () => {
     m.mobileNumber?.toString().includes(search)
   );
 
+  // Helper to formatting image source (robust handling for JSON strings & Drive URLs)
+  const getImageSrc = (data) => {
+    if (!data) return null;
+    
+    let processedData = data;
+    // Handle cases where Google Sheets gives us a JSON string of the object
+    if (typeof data === 'string' && data.trim().startsWith('{')) {
+      try {
+        processedData = JSON.parse(data);
+      } catch (e) {
+        // Not valid JSON
+      }
+    }
+
+    if (typeof processedData === 'string') {
+      // Handle Google Drive links to ensure they are viewable as images
+      if (processedData.includes('drive.google.com')) {
+        const fileId = processedData.match(/id=([^&]+)/)?.[1] || processedData.match(/\/file\/d\/([^/]+)/)?.[1];
+        if (fileId) {
+          return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+        }
+      }
+
+      // If it's a raw base64 without prefix, add it (assuming jpeg/png fallback)
+      if (processedData.length > 100 && !processedData.startsWith('data:')) {
+        return `data:image/jpeg;base64,${processedData}`;
+      }
+      return processedData;
+    }
+    
+    return processedData.previewUrl || (processedData.base64 ? `data:${processedData.mimeType || 'image/jpeg'};base64,${processedData.base64}` : null);
+  };
+
   return (
     <div className="dashboard">
       <Navbar />
@@ -136,12 +170,14 @@ const Dashboard = () => {
                 <th>Join Date</th>
                 <th>Expiry Date</th>
                 <th>Status</th>
+                <th>Receipt</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredMembers.map(member => {
                 const status = calculateStatus(member.expiryDate);
+                const receiptSrc = getImageSrc(member.paymentScreenshot);
                 return (
                   <tr key={member._id}>
                     <td>
@@ -154,6 +190,20 @@ const Dashboard = () => {
                     <td>{member.expiryDate ? new Date(member.expiryDate).toLocaleDateString() : ''}</td>
                     <td>
                       <span className={`badge badge-${status.toLowerCase()}`}>{status}</span>
+                    </td>
+                    <td>
+                      {receiptSrc ? (
+                        <button 
+                          className="receipt-btn" 
+                          onClick={() => setSelectedImage(receiptSrc)}
+                          title="View Payment Receipt"
+                        >
+                          <FaFileImage />
+                          <span>View</span>
+                        </button>
+                      ) : (
+                        <span className="text-dim" style={{ fontSize: '0.8rem' }}>No Image</span>
+                      )}
                     </td>
                     <td>
                       <div className="action-buttons">
@@ -187,6 +237,15 @@ const Dashboard = () => {
                   <p><strong>Mobile:</strong> {member.mobileNumber}</p>
                   <p><strong>Plan:</strong> {member.plan}</p>
                   <p><strong>Expiry:</strong> {member.expiryDate ? new Date(member.expiryDate).toLocaleDateString() : ''}</p>
+                  {getImageSrc(member.paymentScreenshot) && (
+                    <button 
+                      className="btn btn-primary mt-1" 
+                      style={{ width: '100%', fontSize: '0.8rem', padding: '8px' }}
+                      onClick={() => setSelectedImage(getImageSrc(member.paymentScreenshot))}
+                    >
+                      <FaFileImage className="mr-1" /> View Receipt
+                    </button>
+                  )}
                 </div>
                 <div className="card-actions flex justify-between mt-1 pt-1">
                   <button className="btn-text text-primary flex align-center gap-1" onClick={() => handleEdit(member)} disabled={loading}><FaEdit /> Edit</button>
@@ -206,6 +265,16 @@ const Dashboard = () => {
           onEdit={handleEditSubmit}
           loading={loading}
         />
+      )}
+
+      {/* Lightbox Overlay */}
+      {selectedImage && (
+        <div className="lightbox-overlay" onClick={() => setSelectedImage(null)}>
+          <button className="lightbox-close"><FaTimes /></button>
+          <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <img src={selectedImage} alt="Receipt Full size" />
+          </div>
+        </div>
       )}
     </div>
   );

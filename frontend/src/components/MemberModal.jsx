@@ -66,14 +66,56 @@ const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
       const file = e.target.files[0];
       const reader = new FileReader();
       reader.onloadend = () => {
+        // Store the full data URL for preview and the stripped base64 for backend if needed
         setPreview({
           name: file.name,
           mimeType: file.type,
           base64: reader.result.split(',')[1],
-          previewUrl: reader.result // For immediate UI feedback
+          previewUrl: reader.result 
         });
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  // Helper to ensure the image source is always a valid string
+  const getImageSrc = (data) => {
+    if (!data) return null;
+
+    let processedData = data;
+    // Handle cases where Google Sheets gives us a JSON string of the object
+    if (typeof data === 'string' && data.trim().startsWith('{')) {
+      try {
+        processedData = JSON.parse(data);
+      } catch (e) {
+        // Not valid JSON
+      }
+    }
+
+    if (typeof processedData === 'string') {
+      // Handle Google Drive links to ensure they are viewable as images
+      if (processedData.includes('drive.google.com')) {
+        const fileId = processedData.match(/id=([^&]+)/)?.[1] || processedData.match(/\/file\/d\/([^/]+)/)?.[1];
+        if (fileId) {
+          return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+        }
+      }
+
+      // If it's a raw base64 without prefix, add it (assuming jpeg/png fallback)
+      if (processedData.length > 100 && !processedData.startsWith('data:')) {
+        return `data:image/jpeg;base64,${processedData}`;
+      }
+      return processedData;
+    }
+    
+    return processedData.previewUrl || (processedData.base64 ? `data:${processedData.mimeType || 'image/jpeg'};base64,${processedData.base64}` : null);
+  };
+
+  const handleViewFull = () => {
+    const src = getImageSrc(preview);
+    if (src) {
+      const newWindow = window.open();
+      newWindow.document.write(`<img src="${src}" style="max-width:100%; height:auto;" />`);
     }
   };
 
@@ -151,9 +193,20 @@ const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
               
               {preview ? (
                 <div className="flex flex-col align-center">
-                  <img src={preview.previewUrl || preview} alt="Preview" className="preview-img" style={{ maxHeight: '180px' }} />
+                  <div className="preview-container">
+                    <img 
+                      src={getImageSrc(preview)} 
+                      alt="Preview" 
+                      className="preview-img" 
+                      onError={(e) => {
+                        console.error("Image load failed");
+                        e.target.src = 'https://via.placeholder.com/150?text=Invalid+Image';
+                      }}
+                    />
+                  </div>
                   <div className="flex gap-1 mt-1 justify-center p-1">
-                     <button type="button" className="btn btn-danger" onClick={() => setPreview(null)}>Clear Image</button>
+                     <button type="button" className="btn-text text-primary" onClick={handleViewFull}>View Full Size</button>
+                     <button type="button" className="btn-text text-danger" onClick={() => setPreview(null)}>Clear Image</button>
                   </div>
                 </div>
               ) : (
