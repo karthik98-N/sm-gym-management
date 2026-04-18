@@ -138,7 +138,7 @@ const Dashboard = () => {
       <div className="container mt-2">
         <div className="dashboard-header flex justify-between align-center border-bottom pb-1">
           <div className="flex align-center gap-1">
-            <h2>Members List</h2>
+            <h2>Fitness Members Dashboard</h2>
             {loading && <FaSpinner className="spin text-primary" />}
           </div>
           <button className="btn btn-primary flex align-center gap-1" onClick={handleAdd} disabled={loading}>

@@ -19,7 +19,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     // Hardcoded local check to bypass backend completely
     if (email === 'neelikarthik888@gmail.com' && password === '984821') {
-      const mockToken = 'local-frontend-token-123';
+      const mockToken = 'local-smfitness-token-123';
       localStorage.setItem('token', mockToken);
       setToken(mockToken);
       return true;
