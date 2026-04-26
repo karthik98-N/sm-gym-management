@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { FaTimes, FaCamera } from 'react-icons/fa';
+import { FaTimes, FaCamera, FaSpinner } from 'react-icons/fa';
+import imageCompression from 'browser-image-compression';
 import './MemberModal.css';
 
 const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
@@ -13,6 +14,7 @@ const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
     paymentStatus: 'paid'
   });
   const [preview, setPreview] = useState(null);
+  const [isCompressing, setIsCompressing] = useState(false);
 
   useEffect(() => {
     if (member) {
@@ -61,22 +63,33 @@ const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
     }
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Warn if over 120KB but still allow selection (upload logic will handle it)
-    if (file.size > 120 * 1024) {
-      e.target.value = null;
-      // Non-blocking warning via console (Dashboard toast will catch server-side errors)
-      window.dispatchEvent(new CustomEvent('sm-toast', { detail: { message: 'Image must be under 120KB. Please pick a smaller file.', type: 'error' } }));
-      return;
-    }
+    try {
+      setIsCompressing(true);
+      
+      const options = {
+        maxSizeMB: 0.12, // Compress down to 120KB
+        maxWidthOrHeight: 1280, // Keep resolution reasonable but legible
+        useWebWorker: true,
+        fileType: 'image/jpeg'
+      };
 
-    setPreview({
-      file: file,
-      previewUrl: URL.createObjectURL(file)
-    });
+      const compressedFile = await imageCompression(file, options);
+      
+      setPreview({
+        file: compressedFile,
+        previewUrl: URL.createObjectURL(compressedFile)
+      });
+    } catch (error) {
+      console.error("Compression error:", error);
+      window.dispatchEvent(new CustomEvent('sm-toast', { detail: { message: 'Image compression failed. Please try a different photo.', type: 'error' } }));
+    } finally {
+      setIsCompressing(false);
+      e.target.value = null; // Clear input to allow re-selecting same file
+    }
   };
 
   // Helper to ensure the image source is always a valid string
@@ -183,6 +196,11 @@ const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
                      <button type="button" className="btn-text text-primary" onClick={handleViewFull}>View Full Size</button>
                      <button type="button" className="btn-text text-danger" onClick={() => setPreview(null)}>Clear Image</button>
                   </div>
+                </div>
+              ) : isCompressing ? (
+                <div className="flex flex-col gap-1 justify-center align-center h-100 text-primary">
+                  <FaSpinner className="spin" size={30} />
+                  <span style={{ fontSize: '0.9rem' }}>Compressing image...</span>
                 </div>
               ) : (
                 <div className="flex gap-1" style={{ height: '100%' }}>
