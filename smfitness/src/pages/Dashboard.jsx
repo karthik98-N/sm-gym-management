@@ -1,147 +1,276 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import MemberModal from '../components/MemberModal';
-import { FaPlus, FaSearch, FaEdit, FaTrash, FaSpinner, FaFileImage, FaTimes } from 'react-icons/fa';
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaSpinner, FaFileImage, FaTimes, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import './Dashboard.css';
+import { supabase } from '../supabase';
 
-// Connected to Google Apps Script
-const GOOGLE_APP_URL = "https://script.google.com/macros/s/AKfycbyLRV3dPlb4GzyZsFlov-5w3DD3FJH6BMyVJ1w0XhEcfSy54hD06_CoRb6PBoXpujU7/exec";
+const CACHE_KEY = 'sm_gym_members_cache';
 
+// ── Toast Notification System ──────────────────────────────────────────────────
+const Toast = ({ toasts, onRemove }) => (
+  <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+    {toasts.map(t => (
+      <div key={t.id} onClick={() => onRemove(t.id)} style={{
+        display: 'flex', alignItems: 'center', gap: '10px',
+        background: t.type === 'success' ? '#1a3a2a' : '#3a1a1a',
+        border: `1px solid ${t.type === 'success' ? '#2ecc71' : '#e74c3c'}`,
+        color: '#fff', padding: '12px 18px', borderRadius: '10px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.5)', cursor: 'pointer',
+        animation: 'slideInRight 0.25s ease', minWidth: '260px', maxWidth: '360px',
+        fontSize: '0.9rem'
+      }}>
+        {t.type === 'success'
+          ? <FaCheckCircle style={{ color: '#2ecc71', flexShrink: 0 }} />
+          : <FaExclamationCircle style={{ color: '#e74c3c', flexShrink: 0 }} />}
+        <span>{t.message}</span>
+      </div>
+    ))}
+  </div>
+);
+
+// ── MemoizedRow to prevent re-renders ─────────────────────────────────────────
+const MemberRow = React.memo(({ member, onEdit, onDelete, onViewImage, saving }) => {
+  const status = useMemo(() => {
+    return new Date(member.expiryDate) >= new Date() ? 'Active' : 'Expired';
+  }, [member.expiryDate]);
+
+  const receiptSrc = typeof member.paymentScreenshot === 'string' ? member.paymentScreenshot : null;
+
+  return (
+    <tr>
+      <td>
+        <div className="member-name">{member.fullName}</div>
+        <div className="member-email">{member.email}</div>
+      </td>
+      <td>{member.mobileNumber}</td>
+      <td>{member.plan}</td>
+      <td>{member.joinDate ? new Date(member.joinDate).toLocaleDateString() : ''}</td>
+      <td>{member.expiryDate ? new Date(member.expiryDate).toLocaleDateString() : ''}</td>
+      <td><span className={`badge badge-${status.toLowerCase()}`}>{status}</span></td>
+      <td>
+        {receiptSrc ? (
+          <button className="receipt-btn" onClick={() => onViewImage(receiptSrc)} title="View Payment Receipt">
+            <FaFileImage /><span>View</span>
+          </button>
+        ) : (
+          <span className="text-dim" style={{ fontSize: '0.8rem' }}>No Image</span>
+        )}
+      </td>
+      <td>
+        <div className="action-buttons">
+          <button className="btn-icon text-primary" onClick={() => onEdit(member)} disabled={saving}><FaEdit /></button>
+          <button className="btn-icon text-danger" onClick={() => onDelete(member._id)} disabled={saving}><FaTrash /></button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
+// ── Dashboard ──────────────────────────────────────────────────────────────────
 const Dashboard = () => {
-  const [members, setMembers] = useState([]);
+  // Load from cache instantly (0ms)
+  const [members, setMembers] = useState(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null); // For Lightbox
+  const [saving, setSaving] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const debounceRef = useRef(null);
 
-  useEffect(() => {
-    fetchMembers();
+  // ── Toast helpers ──
+  const addToast = useCallback((message, type = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
   }, []);
 
-  const sendGooglePost = async (action, payload = {}) => {
-    // Mode "no-cors" bypasses Google's strict browser security blocks completely for POSTs.
-    // It means we can shoot data strictly into Google safely.
-    try {
-      await fetch(GOOGLE_APP_URL, {
-        method: "POST",
-        mode: "no-cors", 
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...payload })
-      });
-      // no-cors returns an opaque response, so we don't try to parse it. We just wait 1s.
-      await new Promise(resolve => setTimeout(resolve, 1500)); 
-    } catch (err) {
-      console.error("Google Script Error:", err);
-      alert("Failed to push data to Google Drive.");
-    }
-  };
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
 
-  const fetchMembers = async () => {
-    setLoading(true);
+  // ── Debounced search ──
+  const handleSearchChange = useCallback((e) => {
+    const val = e.target.value;
+    setSearch(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(val), 200);
+  }, []);
+
+  // ── Fetch & cache ──
+  const fetchMembers = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const response = await fetch(`${GOOGLE_APP_URL}?action=GET`);
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        // Automatically map 'id' to '_id' in case the user's sheet header was 'id' instead of '_id'
-        const normalizedData = data.map(m => ({ ...m, _id: m._id || m.id }));
-        setMembers(normalizedData.reverse());
+      const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Fetch Error:', error);
+      } else if (data) {
+        const normalized = data.map(m => ({ ...m, _id: m.id }));
+        setMembers(normalized);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(normalized)); } catch {}
       }
-    } catch(err) {
-      console.log("Fetch failed, probably needs doGet script setup.");
+    } catch (err) {
+      console.error('Fetch failed:', err);
     }
-    setLoading(false);
-  };
+    if (!silent) setLoading(false);
+  }, []);
 
-  const handleAddSubmit = async (newMemberData) => {
-    setLoading(true);
-    const uniqueId = Date.now().toString();
-    const newMember = { ...newMemberData, _id: uniqueId, id: uniqueId, createdAt: new Date().toISOString() };
-    await sendGooglePost('POST', { member: newMember });
-    await fetchMembers();
-    setIsModalOpen(false);
-  };
+  useEffect(() => {
+    // If cache was loaded, fetch silently in background — user sees data instantly
+    fetchMembers(members.length > 0);
 
-  const handleEditSubmit = async (id, updatedData) => {
-    setLoading(true);
-    await sendGooglePost('PUT', { id, member: updatedData });
-    await fetchMembers();
-    setIsModalOpen(false);
-  };
+    // Listen for toast events from child components (e.g. MemberModal)
+    const handler = (e) => addToast(e.detail.message, e.detail.type);
+    window.addEventListener('sm-toast', handler);
+    return () => window.removeEventListener('sm-toast', handler);
+  }, []);
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this member from Google Drive?')) {
-      setLoading(true);
-      await sendGooglePost('DELETE', { id });
-      await fetchMembers();
+  // ── Upload helper with compression ──
+  const uploadImage = useCallback(async (file) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const { error } = await supabase.storage.from('receipts').upload(fileName, file);
+    if (error) {
+      addToast(`Image upload failed: ${error.message}`, 'error');
+      return null;
     }
-  };
+    const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(fileName);
+    return urlData.publicUrl;
+  }, [addToast]);
 
-  const handleAdd = () => {
-    setEditingMember(null);
-    setIsModalOpen(true);
-  };
+  // ── Add Member ──
+  const handleAddSubmit = useCallback(async (newMemberData) => {
+    setSaving(true);
 
-  const handleEdit = (member) => {
-    setEditingMember(member);
-    setIsModalOpen(true);
-  };
+    let paymentScreenshotUrl = null;
+    if (newMemberData.paymentScreenshot?.file) {
+      paymentScreenshotUrl = await uploadImage(newMemberData.paymentScreenshot.file);
+    }
 
-  const calculateStatus = (expiryDate) => {
-    const today = new Date();
-    const expiry = new Date(expiryDate);
-    return expiry >= today ? 'Active' : 'Expired';
-  };
+    const { paymentScreenshot, ...memberData } = newMemberData;
+    const finalMemberData = { ...memberData, paymentScreenshot: paymentScreenshotUrl };
 
-  const filteredMembers = members.filter(m => 
-    m.fullName?.toString().toLowerCase().includes(search.toLowerCase()) ||
-    m.mobileNumber?.toString().includes(search)
-  );
+    // Optimistic update
+    const tempId = `temp-${Date.now()}`;
+    const optimistic = { ...finalMemberData, id: tempId, _id: tempId };
+    setMembers(prev => {
+      const next = [optimistic, ...prev];
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setIsModalOpen(false);
 
-  // Helper to formatting image source (robust handling for JSON strings & Drive URLs)
+    const { data, error } = await supabase.from('members').insert([finalMemberData]).select().single();
+    if (error) {
+      addToast(`Save failed: ${error.message}`, 'error');
+      setMembers(prev => {
+        const next = prev.filter(m => m._id !== tempId);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+        return next;
+      });
+    } else {
+      const real = { ...data, _id: data.id };
+      setMembers(prev => {
+        const next = prev.map(m => m._id === tempId ? real : m);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+        return next;
+      });
+      addToast('Member saved successfully!');
+    }
+    setSaving(false);
+  }, [uploadImage, addToast]);
+
+  // ── Edit Member ──
+  const handleEditSubmit = useCallback(async (id, updatedData) => {
+    setSaving(true);
+
+    let paymentScreenshotUrl = updatedData.paymentScreenshot;
+    if (updatedData.paymentScreenshot?.file) {
+      paymentScreenshotUrl = await uploadImage(updatedData.paymentScreenshot.file);
+      if (!paymentScreenshotUrl) { setSaving(false); return; }
+    } else if (typeof updatedData.paymentScreenshot !== 'string') {
+      paymentScreenshotUrl = null;
+    }
+
+    const { paymentScreenshot, _id, id: oldId, ...memberData } = updatedData;
+    const finalMemberData = { ...memberData, paymentScreenshot: paymentScreenshotUrl };
+
+    // Optimistic update
+    setMembers(prev => {
+      const next = prev.map(m => m._id === id ? { ...m, ...finalMemberData } : m);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setIsModalOpen(false);
+
+    const { error } = await supabase.from('members').update(finalMemberData).eq('id', id);
+    if (error) {
+      addToast(`Update failed: ${error.message}`, 'error');
+      fetchMembers(true);
+    } else {
+      addToast('Member updated successfully!');
+    }
+    setSaving(false);
+  }, [uploadImage, addToast, fetchMembers]);
+
+  // ── Delete Member ──
+  const handleDelete = useCallback(async (id) => {
+    if (!window.confirm('Delete this member?')) return;
+
+    setMembers(prev => {
+      const next = prev.filter(m => m._id !== id);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    const { error } = await supabase.from('members').delete().eq('id', id);
+    if (error) {
+      addToast(`Delete failed: ${error.message}`, 'error');
+      fetchMembers(true);
+    } else {
+      addToast('Member deleted.');
+    }
+  }, [addToast, fetchMembers]);
+
+  const handleAdd = useCallback(() => { setEditingMember(null); setIsModalOpen(true); }, []);
+  const handleEdit = useCallback((member) => { setEditingMember(member); setIsModalOpen(true); }, []);
+
+  const filteredMembers = useMemo(() =>
+    members.filter(m =>
+      m.fullName?.toString().toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      m.mobileNumber?.toString().includes(debouncedSearch)
+    ), [members, debouncedSearch]);
+
   const getImageSrc = (data) => {
     if (!data) return null;
-    
-    let processedData = data;
-    // Handle cases where Google Sheets gives us a JSON string of the object
-    if (typeof data === 'string' && data.trim().startsWith('{')) {
-      try {
-        processedData = JSON.parse(data);
-      } catch (e) {
-        // Not valid JSON
-      }
-    }
-
-    if (typeof processedData === 'string') {
-      // Handle Google Drive links to ensure they are viewable as images
-      if (processedData.includes('drive.google.com')) {
-        const fileId = processedData.match(/id=([^&]+)/)?.[1] || processedData.match(/\/file\/d\/([^/]+)/)?.[1];
-        if (fileId) {
-          return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
-        }
-      }
-
-      // If it's a raw base64 without prefix, add it (assuming jpeg/png fallback)
-      if (processedData.length > 100 && !processedData.startsWith('data:')) {
-        return `data:image/jpeg;base64,${processedData}`;
-      }
-      return processedData;
-    }
-    
-    return processedData.previewUrl || (processedData.base64 ? `data:${processedData.mimeType || 'image/jpeg'};base64,${processedData.base64}` : null);
+    if (typeof data === 'string') return data;
+    return data.previewUrl || null;
   };
 
   return (
     <div className="dashboard">
       <Navbar />
+      <style>{`@keyframes slideInRight { from { opacity:0; transform:translateX(30px); } to { opacity:1; transform:translateX(0); } }`}</style>
       
       <div className="container mt-2">
         <div className="dashboard-header flex justify-between align-center border-bottom pb-1">
           <div className="flex align-center gap-1">
             <h2>Fitness Members Dashboard</h2>
-            {loading && <FaSpinner className="spin text-primary" />}
+            {(loading || saving) && <FaSpinner className="spin text-primary" />}
           </div>
-          <button className="btn btn-primary flex align-center gap-1" onClick={handleAdd} disabled={loading}>
+          <button className="btn btn-primary flex align-center gap-1" onClick={handleAdd} disabled={saving}>
             <FaPlus /> Add Member
           </button>
         </div>
@@ -153,71 +282,35 @@ const Dashboard = () => {
               type="text" 
               placeholder="Search by name or mobile..." 
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={handleSearchChange}
               className="form-control"
             />
           </div>
         </div>
 
-        {/* Desktop View - Table */}
+        {/* Desktop View */}
         <div className="table-responsive">
           <table className="members-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Mobile</th>
-                <th>Plan</th>
-                <th>Join Date</th>
-                <th>Expiry Date</th>
-                <th>Status</th>
-                <th>Receipt</th>
-                <th>Actions</th>
+                <th>Name</th><th>Mobile</th><th>Plan</th>
+                <th>Join Date</th><th>Expiry Date</th>
+                <th>Status</th><th>Receipt</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredMembers.map(member => {
-                const status = calculateStatus(member.expiryDate);
-                const receiptSrc = getImageSrc(member.paymentScreenshot);
-                return (
-                  <tr key={member._id}>
-                    <td>
-                      <div className="member-name">{member.fullName}</div>
-                      <div className="member-email">{member.email}</div>
-                    </td>
-                    <td>{member.mobileNumber}</td>
-                    <td>{member.plan}</td>
-                    <td>{member.joinDate ? new Date(member.joinDate).toLocaleDateString() : ''}</td>
-                    <td>{member.expiryDate ? new Date(member.expiryDate).toLocaleDateString() : ''}</td>
-                    <td>
-                      <span className={`badge badge-${status.toLowerCase()}`}>{status}</span>
-                    </td>
-                    <td>
-                      {receiptSrc ? (
-                        <button 
-                          className="receipt-btn" 
-                          onClick={() => setSelectedImage(receiptSrc)}
-                          title="View Payment Receipt"
-                        >
-                          <FaFileImage />
-                          <span>View</span>
-                        </button>
-                      ) : (
-                        <span className="text-dim" style={{ fontSize: '0.8rem' }}>No Image</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="action-buttons">
-                        <button className="btn-icon text-primary" onClick={() => handleEdit(member)} disabled={loading}><FaEdit /></button>
-                        <button className="btn-icon text-danger" onClick={() => handleDelete(member._id)} disabled={loading}><FaTrash /></button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filteredMembers.map(member => (
+                <MemberRow
+                  key={member._id}
+                  member={member}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onViewImage={setSelectedImage}
+                  saving={saving}
+                />
+              ))}
               {filteredMembers.length === 0 && !loading && (
-                <tr>
-                  <td colSpan="7" className="text-center p-2">No members found in Drive.</td>
-                </tr>
+                <tr><td colSpan="8" className="text-center p-2">No members found.</td></tr>
               )}
             </tbody>
           </table>
@@ -226,7 +319,7 @@ const Dashboard = () => {
         {/* Mobile View - Cards */}
         <div className="members-grid">
           {filteredMembers.map(member => {
-            const status = calculateStatus(member.expiryDate);
+            const status = new Date(member.expiryDate) >= new Date() ? 'Active' : 'Expired';
             return (
               <div className="member-card" key={member._id}>
                 <div className="card-header flex justify-between align-center">
@@ -248,8 +341,8 @@ const Dashboard = () => {
                   )}
                 </div>
                 <div className="card-actions flex justify-between mt-1 pt-1">
-                  <button className="btn-text text-primary flex align-center gap-1" onClick={() => handleEdit(member)} disabled={loading}><FaEdit /> Edit</button>
-                  <button className="btn-text text-danger flex align-center gap-1" onClick={() => handleDelete(member._id)} disabled={loading}><FaTrash /> Delete</button>
+                  <button className="btn-text text-primary flex align-center gap-1" onClick={() => handleEdit(member)} disabled={saving}><FaEdit /> Edit</button>
+                  <button className="btn-text text-danger flex align-center gap-1" onClick={() => handleDelete(member._id)} disabled={saving}><FaTrash /> Delete</button>
                 </div>
               </div>
             );
@@ -263,19 +356,20 @@ const Dashboard = () => {
           member={editingMember} 
           onAdd={handleAddSubmit}
           onEdit={handleEditSubmit}
-          loading={loading}
+          loading={saving}
         />
       )}
 
-      {/* Lightbox Overlay */}
       {selectedImage && (
         <div className="lightbox-overlay" onClick={() => setSelectedImage(null)}>
           <button className="lightbox-close"><FaTimes /></button>
           <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <img src={selectedImage} alt="Receipt Full size" />
+            <img src={selectedImage} alt="Receipt Full size" loading="lazy" />
           </div>
         </div>
       )}
+
+      <Toast toasts={toasts} onRemove={removeToast} />
     </div>
   );
 };

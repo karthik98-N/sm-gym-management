@@ -62,53 +62,28 @@ const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
   };
 
   const handleFileChange = (e) => {
-    if (e.target.files[0]) {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        // Store the full data URL for preview and the stripped base64 for backend if needed
-        setPreview({
-          name: file.name,
-          mimeType: file.type,
-          base64: reader.result.split(',')[1],
-          previewUrl: reader.result 
-        });
-      };
-      reader.readAsDataURL(file);
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Warn if over 120KB but still allow selection (upload logic will handle it)
+    if (file.size > 120 * 1024) {
+      e.target.value = null;
+      // Non-blocking warning via console (Dashboard toast will catch server-side errors)
+      window.dispatchEvent(new CustomEvent('sm-toast', { detail: { message: 'Image must be under 120KB. Please pick a smaller file.', type: 'error' } }));
+      return;
     }
+
+    setPreview({
+      file: file,
+      previewUrl: URL.createObjectURL(file)
+    });
   };
 
   // Helper to ensure the image source is always a valid string
   const getImageSrc = (data) => {
     if (!data) return null;
-
-    let processedData = data;
-    // Handle cases where Google Sheets gives us a JSON string of the object
-    if (typeof data === 'string' && data.trim().startsWith('{')) {
-      try {
-        processedData = JSON.parse(data);
-      } catch (e) {
-        // Not valid JSON
-      }
-    }
-
-    if (typeof processedData === 'string') {
-      // Handle Google Drive links to ensure they are viewable as images
-      if (processedData.includes('drive.google.com')) {
-        const fileId = processedData.match(/id=([^&]+)/)?.[1] || processedData.match(/\/file\/d\/([^/]+)/)?.[1];
-        if (fileId) {
-          return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
-        }
-      }
-
-      // If it's a raw base64 without prefix, add it (assuming jpeg/png fallback)
-      if (processedData.length > 100 && !processedData.startsWith('data:')) {
-        return `data:image/jpeg;base64,${processedData}`;
-      }
-      return processedData;
-    }
-    
-    return processedData.previewUrl || (processedData.base64 ? `data:${processedData.mimeType || 'image/jpeg'};base64,${processedData.base64}` : null);
+    if (typeof data === 'string') return data;
+    return data.previewUrl || null;
   };
 
   const handleViewFull = () => {
@@ -225,9 +200,9 @@ const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
           </div>
 
           <div className="modal-footer flex justify-between mt-2 pt-2 border-top">
-            <button type="button" className="btn btn-danger" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">
-              Save Member
+            <button type="button" className="btn btn-danger" onClick={onClose} disabled={loading}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={loading}>
+              {loading ? 'Saving...' : 'Save Member'}
             </button>
           </div>
         </form>
