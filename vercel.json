@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd smfitness && npm install && npm run build",
+  "outputDirectory": "smfitness/dist",
+  "installCommand": "cd smfitness && npm install",
+  "framework": "vite"
+}
