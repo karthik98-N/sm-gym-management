@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FaTimes, FaCamera, FaSpinner } from 'react-icons/fa';
+import { FaTimes, FaCamera } from 'react-icons/fa';
 import imageCompression from 'browser-image-compression';
+import LoadingOverlay from './ui/LoadingOverlay';
 import './MemberModal.css';
 
 const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
@@ -120,6 +121,11 @@ const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
 
   return (
     <div className="modal-overlay flex align-center justify-center">
+      {/* Rose Curve overlay — shown when saving or network is slow */}
+      <LoadingOverlay visible={loading} message="Saving member…" />
+      {/* Rose Curve overlay — shown when compressing image */}
+      <LoadingOverlay visible={isCompressing} message="Compressing image…" />
+
       <div className="modal-content">
         <div className="modal-header flex justify-between align-center border-bottom pb-1 mb-2">
           <h2>{member ? 'Edit Member' : 'Add New Member'}</h2>
@@ -196,11 +202,6 @@ const MemberModal = ({ onClose, member, onAdd, onEdit, loading }) => {
                      <button type="button" className="btn-text text-primary" onClick={handleViewFull}>View Full Size</button>
                      <button type="button" className="btn-text text-danger" onClick={() => setPreview(null)}>Clear Image</button>
                   </div>
-                </div>
-              ) : isCompressing ? (
-                <div className="flex flex-col gap-1 justify-center align-center h-100 text-primary">
-                  <FaSpinner className="spin" size={30} />
-                  <span style={{ fontSize: '0.9rem' }}>Compressing image...</span>
                 </div>
               ) : (
                 <div className="flex gap-1" style={{ height: '100%' }}>

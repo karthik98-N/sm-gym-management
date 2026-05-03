@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import MemberModal from '../components/MemberModal';
-import { FaPlus, FaSearch, FaEdit, FaTrash, FaSpinner, FaFileImage, FaTimes, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
+import RoseCurveLoader from '../components/ui/RoseCurveLoader';
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaFileImage, FaTimes, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import './Dashboard.css';
 import { supabase } from '../supabase';
 
@@ -83,6 +84,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [imageLoading, setImageLoading] = useState(true);
+  const [memberToDelete, setMemberToDelete] = useState(null); // Custom confirm modal state
   const [toasts, setToasts] = useState([]);
   const debounceRef = useRef(null);
 
@@ -226,8 +229,17 @@ const Dashboard = () => {
   }, [uploadImage, addToast, fetchMembers]);
 
   // ── Delete Member ──
-  const handleDelete = useCallback(async (id) => {
-    if (!window.confirm('Delete this member?')) return;
+  const requestDelete = useCallback((id) => {
+    setMemberToDelete(id);
+  }, []);
+
+  const executeDelete = useCallback(async () => {
+    if (!memberToDelete) return;
+    const id = memberToDelete;
+    setMemberToDelete(null); // Close the modal immediately
+
+    // Capture the member before optimistic update
+    const deletedMember = members.find(m => m._id === id);
 
     setMembers(prev => {
       const next = prev.filter(m => m._id !== id);
@@ -235,14 +247,27 @@ const Dashboard = () => {
       return next;
     });
 
+    // Delete from database
     const { error } = await supabase.from('members').delete().eq('id', id);
+    
     if (error) {
       addToast(`Delete failed: ${error.message}`, 'error');
-      fetchMembers(true);
     } else {
       addToast('Member deleted.');
+      
+      // Clean up orphaned receipt image from storage
+      if (deletedMember && typeof deletedMember.paymentScreenshot === 'string') {
+        const urlParts = deletedMember.paymentScreenshot.split('/');
+        const fileName = urlParts[urlParts.length - 1];
+        if (fileName && fileName !== 'null' && fileName !== 'undefined') {
+          supabase.storage.from('receipts').remove([fileName]).catch(err => console.error('Failed to delete image:', err));
+        }
+      }
     }
-  }, [addToast, fetchMembers]);
+    
+    // Always sync state with server to prevent race conditions with background fetches
+    fetchMembers(true);
+  }, [memberToDelete, members, addToast, fetchMembers]);
 
   const handleAdd = useCallback(() => { setEditingMember(null); setIsModalOpen(true); }, []);
   const handleEdit = useCallback((member) => { setEditingMember(member); setIsModalOpen(true); }, []);
@@ -259,6 +284,12 @@ const Dashboard = () => {
     return data.previewUrl || null;
   };
 
+  useEffect(() => {
+    if (selectedImage) {
+      setImageLoading(true);
+    }
+  }, [selectedImage]);
+
   return (
     <div className="dashboard">
       <Navbar />
@@ -268,7 +299,7 @@ const Dashboard = () => {
         <div className="dashboard-header flex justify-between align-center border-bottom pb-1">
           <div className="flex align-center gap-1">
             <h2>Fitness Members Dashboard</h2>
-            {(loading || saving) && <FaSpinner className="spin text-primary" />}
+            {(loading || saving) && <div style={{marginTop: '4px'}}><RoseCurveLoader size={20} color="rgba(255, 255, 255, 0.6)" /></div>}
           </div>
           <button className="btn btn-primary flex align-center gap-1" onClick={handleAdd} disabled={saving}>
             <FaPlus /> Add Member
@@ -304,7 +335,7 @@ const Dashboard = () => {
                   key={member._id}
                   member={member}
                   onEdit={handleEdit}
-                  onDelete={handleDelete}
+                  onDelete={requestDelete}
                   onViewImage={setSelectedImage}
                   saving={saving}
                 />
@@ -342,7 +373,7 @@ const Dashboard = () => {
                 </div>
                 <div className="card-actions flex justify-between mt-1 pt-1">
                   <button className="btn-text text-primary flex align-center gap-1" onClick={() => handleEdit(member)} disabled={saving}><FaEdit /> Edit</button>
-                  <button className="btn-text text-danger flex align-center gap-1" onClick={() => handleDelete(member._id)} disabled={saving}><FaTrash /> Delete</button>
+                  <button className="btn-text text-danger flex align-center gap-1" onClick={() => requestDelete(member._id)} disabled={saving}><FaTrash /> Delete</button>
                 </div>
               </div>
             );
@@ -363,8 +394,35 @@ const Dashboard = () => {
       {selectedImage && (
         <div className="lightbox-overlay" onClick={() => setSelectedImage(null)}>
           <button className="lightbox-close"><FaTimes /></button>
-          <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <img src={selectedImage} alt="Receipt Full size" loading="lazy" />
+          <div className="lightbox-content" onClick={(e) => e.stopPropagation()} style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+            {imageLoading && (
+              <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                <RoseCurveLoader size={80} color="rgba(255, 255, 255, 0.8)" />
+                <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Loading Receipt...</span>
+              </div>
+            )}
+            <img 
+              src={selectedImage} 
+              alt="Receipt Full size" 
+              loading="lazy" 
+              onLoad={() => setImageLoading(false)}
+              style={{ opacity: imageLoading ? 0 : 1, transition: 'opacity 0.4s ease', maxWidth: '100%', maxHeight: '80vh' }}
+            />
+          </div>
+        </div>
+      )}
+
+      {memberToDelete && (
+        <div className="modal-overlay flex align-center justify-center" style={{ zIndex: 10000 }}>
+          <div className="modal-content" style={{ maxWidth: '400px', textAlign: 'center', padding: '30px' }}>
+            <h3 style={{ marginBottom: '15px', fontSize: '1.4rem' }}>Delete Member?</h3>
+            <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '25px', lineHeight: '1.5' }}>
+              Are you sure you want to permanently delete this member? This action cannot be undone.
+            </p>
+            <div className="flex justify-center gap-2">
+              <button className="btn btn-secondary" onClick={() => setMemberToDelete(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={executeDelete}>Yes, Delete</button>
+            </div>
           </div>
         </div>
       )}

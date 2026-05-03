@@ -1,73 +1,461 @@
-.login-container {
+/* ═══════════════════════════════════════════════
+   SM FITNESS — Cinematic Login Page
+   Two-stage: Hero (img1)  →  Form (img2 crossfade)
+═══════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&family=Cinzel:wght@700;900&display=swap');
+
+/* ── Aurora design tokens ────────────────────── */
+:root {
+  --rainbow-blue: 217 91% 60%;
+  --rainbow-pink: 330 81% 60%;
+  --rainbow-cyan: 180 77% 50%;
+  --stripe-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Aurora keyframes ────────────────────────── */
+@keyframes aurora-bg {
+  0%   { background-position: 0%   50%, 0%   50%; }
+  50%  { background-position: 100% 50%, 100% 50%; }
+  100% { background-position: 0%   50%, 0%   50%; }
+}
+
+@keyframes aurora-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.animate-aurora-bg   { animation: aurora-bg    15s ease infinite; }
+.animate-aurora-blink{ animation: aurora-blink  2s ease-in-out infinite; }
+
+/* ── Root container ─────────────────────────── */
+.lp-root {
+  position: relative;
+  min-height: 100svh;
+  width: 100%;
   display: flex;
-  justify-content: center;
   align-items: center;
-  height: 100vh;
-  background: radial-gradient(circle at center, var(--bg-color-light) 0%, var(--bg-color) 100%);
-  padding: 20px;
+  justify-content: center;
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+  background: #0a0a0f;
 }
 
-.login-box {
-  background-color: #1a1a1a;
-  padding: 40px;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 215, 0, 0.1);
+/* ── Aurora hero background wrapper ─────────── */
+.lp-aurora-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.lp-aurora-hero {
   width: 100%;
-  max-width: 400px;
-  animation: slideUp 0.5s ease forwards;
+  height: 100%;
 }
 
-.logo-container {
+.lp-aurora-hero > div {
+  min-height: 100svh !important;
+}
+
+/* ── Background image layers (on top of aurora) ── */
+.lp-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lp-bg1 {
+  background-image: url('/hanuman1.png');
+  opacity: 0.7;
+  z-index: 1;
+}
+
+.lp-bg2 {
+  background-image: url('/hanuman2.png');
+  opacity: 0;
+  z-index: 2;
+}
+
+.lp-bg2.visible {
+  opacity: 0.7;
+}
+
+/* ── Overlay gradient ────────────────────────── */
+.lp-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.45) 0%,
+    rgba(0, 0, 0, 0.15) 50%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+
+/* ── Content wrapper ─────────────────────────── */
+.lp-content {
+  position: relative;
+  z-index: 4;
+  width: 100%;
+  max-width: 520px;
+  padding: clamp(24px, 5vw, 56px) clamp(20px, 5vw, 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  animation: lp-fade-in 0.8s ease both;
+}
+
+@keyframes lp-fade-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Brand ───────────────────────────────────── */
+.lp-brand {
   text-align: center;
-  margin-bottom: 30px;
+  transition: all 0.5s ease;
 }
 
-.logo-text {
-  font-size: 2.5rem;
-  font-weight: 800;
-  letter-spacing: -1px;
+.brand-sm {
+  font-family: 'Cinzel', serif;
+  font-size: clamp(2.6rem, 8vw, 4.2rem);
+  font-weight: 900;
+  color: #FFD700;
+  letter-spacing: 2px;
+  line-height: 1;
+  text-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
 }
 
-.logo-highlight {
-  color: var(--primary-color);
+.brand-fit {
+  font-family: 'Cinzel', serif;
+  font-size: clamp(2.6rem, 8vw, 4.2rem);
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 2px;
+  line-height: 1;
 }
 
-.logo-subtext {
-  font-size: 1rem;
-  letter-spacing: 5px;
-  color: var(--text-dim);
+.brand-studio {
+  font-size: clamp(0.7rem, 2vw, 0.9rem);
+  letter-spacing: 8px;
+  color: rgba(255, 255, 255, 0.55);
   text-transform: uppercase;
+  margin-top: 6px;
+  font-weight: 300;
 }
 
-.login-title {
+/* Brand shrinks when form is visible */
+.brand-small .brand-sm,
+.brand-small .brand-fit {
+  font-size: clamp(1.5rem, 5vw, 2rem);
+}
+.brand-small .brand-studio {
+  letter-spacing: 5px;
+  font-size: 0.7rem;
+}
+
+/* ── Hero CTA ────────────────────────────────── */
+.lp-hero-cta {
   text-align: center;
-  margin-bottom: 25px;
-  font-weight: 400;
-  font-size: 1.2rem;
-  color: var(--text-light);
+  animation: lp-slide-up 0.6s ease both;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
 }
 
-.w-100 {
+@keyframes lp-slide-up {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.hero-tagline {
+  font-family: 'Cinzel', serif;
+  font-size: clamp(1.5rem, 5vw, 2.6rem);
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.hero-sub {
+  font-size: clamp(0.8rem, 2.5vw, 1rem);
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+  max-width: 380px;
+  line-height: 1.6;
+}
+
+/* ── Flip-char keyframe (required by FlipText component) ── */
+@keyframes flip-char {
+  0%   { transform: rotateX(0deg);    opacity: 1; }
+  45%  { transform: rotateX(-90deg);  opacity: 0; }
+  55%  { transform: rotateX(90deg);   opacity: 0; }
+  100% { transform: rotateX(0deg);    opacity: 1; }
+}
+
+.flip-char {
+  animation: flip-char var(--flip-duration, 2.2s) var(--flip-delay, 0s) var(--flip-iteration, infinite) ease-in-out;
+  display: inline-block;
+  backface-visibility: hidden;
+}
+
+/* ── Get Started — iPhone liquid glass ─────── */
+.btn-get-started {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 38px;
+
+  /* Liquid glass */
+  background: rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(28px) saturate(200%);
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+
+  /* Iridescent border */
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 50px;
+  cursor: pointer;
+
+  /* Depth */
+  box-shadow:
+    0 6px 32px rgba(255, 255, 255, 0.1),
+    0 1px 0 rgba(255, 255, 255, 0.4) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.08) inset;
+
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.92rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-shadow: 0 0 16px rgba(255, 255, 255, 0.5);
+
+  transition: background 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.btn-get-started svg {
+  width: 18px;
+  height: 18px;
+  stroke: rgba(255, 255, 255, 0.9);
+  transition: transform 0.2s ease;
+}
+
+.btn-get-started:hover {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 10px 48px rgba(255, 255, 255, 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.1) inset;
+  transform: translateY(-2px);
+}
+
+.btn-get-started:hover svg {
+  transform: translateX(5px);
+}
+
+/* ── Login Form ──────────────────────────────── */
+.lp-form-wrap {
   width: 100%;
+  background: rgba(10, 10, 10, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 215, 0, 0.15);
+  border-radius: 20px;
+  padding: clamp(28px, 5vw, 42px) clamp(24px, 5vw, 40px);
+  animation: lp-slide-up 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
 }
 
-.error-msg {
-  background-color: rgba(255, 71, 87, 0.1);
-  color: var(--danger);
-  padding: 10px;
-  border-radius: 5px;
-  margin-bottom: 20px;
+.form-title {
   text-align: center;
-  font-size: 0.9rem;
+  font-size: clamp(1rem, 3vw, 1.3rem);
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0 0 24px 0;
+  letter-spacing: 1px;
 }
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
+.lp-error {
+  background: rgba(255, 71, 87, 0.12);
+  border: 1px solid rgba(255, 71, 87, 0.35);
+  color: #ff6b7a;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 18px;
+  font-size: 0.875rem;
+  text-align: center;
+  animation: lp-fade-in 0.3s ease both;
+}
+
+.lp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.lp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lp-field label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 600;
+}
+
+.lp-field input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 13px 16px;
+  color: #fff;
+  font-size: 0.95rem;
+  font-family: 'Inter', sans-serif;
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+  outline: none;
+}
+
+.lp-field input::placeholder {
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.lp-field input:focus {
+  border-color: rgba(255, 215, 0, 0.7);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.12);
+}
+
+.btn-login {
+  margin-top: 6px;
+  padding: 14px;
+  background: linear-gradient(135deg, #FFD700, #FF8C00);
+  color: #000;
+  font-weight: 800;
+  font-size: 0.9rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  width: 100%;
+  box-shadow: 0 6px 24px rgba(255, 165, 0, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-login:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 32px rgba(255, 165, 0, 0.55);
+}
+
+.btn-login:active {
+  transform: translateY(0);
+}
+
+/* ── AnimatedButton override — iPhone liquid glass ── */
+.btn-login-animated {
+  margin-top: 6px !important;
+  width: 100% !important;
+  padding: 16px 0 !important;
+  border-radius: 16px !important;
+
+  /* Liquid glass core */
+  background: rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+
+  /* Glowing iridescent border */
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+
+  /* Depth & glow */
+  box-shadow:
+    0 4px 24px rgba(255, 255, 255, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.08) inset !important;
+
+  /* White liquid shimmer */
+  --shine: rgba(255, 255, 255, 0.95) !important;
+
+  transition: box-shadow 0.3s ease, background 0.3s ease !important;
+}
+
+.btn-login-animated:hover {
+  background: rgba(255, 255, 255, 0.18) !important;
+  box-shadow:
+    0 8px 40px rgba(255, 255, 255, 0.14),
+    0 1px 0 rgba(255, 255, 255, 0.45) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.1) inset !important;
+}
+
+/* Text inside */
+.btn-login-animated span {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 0.88rem !important;
+  letter-spacing: 3px !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.6) !important;
+}
+
+.btn-back {
+  display: block;
+  margin: 16px auto 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.82rem;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: color 0.2s ease;
+  padding: 4px 8px;
+}
+
+.btn-back:hover {
+  color: rgba(255, 215, 0, 0.75);
+}
+
+/* ── Responsive tweaks ───────────────────────── */
+@media (max-width: 480px) {
+  .lp-content {
+    padding: 20px 16px;
+    justify-content: flex-end;
+    min-height: 100svh;
+    padding-bottom: 40px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .lp-bg1,
+  .lp-bg2 {
+    background-position: 60% top;
+  }
+
+  .lp-overlay {
+    background: linear-gradient(
+      to bottom,
+      rgba(0,0,0,0.2) 0%,
+      rgba(0,0,0,0.5) 40%,
+      rgba(0,0,0,0.85) 100%
+    );
+  }
+
+  .lp-form-wrap {
+    padding: 24px 20px;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  .lp-content {
+    max-width: 440px;
   }
 }
