@@ -79,6 +79,7 @@ const Dashboard = () => {
   });
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -272,11 +273,21 @@ const Dashboard = () => {
   const handleAdd = useCallback(() => { setEditingMember(null); setIsModalOpen(true); }, []);
   const handleEdit = useCallback((member) => { setEditingMember(member); setIsModalOpen(true); }, []);
 
+  const activeCount = useMemo(() => members.filter(m => new Date(m.expiryDate) >= new Date()).length, [members]);
+  const expiredCount = members.length - activeCount;
+
   const filteredMembers = useMemo(() =>
-    members.filter(m =>
-      m.fullName?.toString().toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      m.mobileNumber?.toString().includes(debouncedSearch)
-    ), [members, debouncedSearch]);
+    members.filter(m => {
+      const matchesSearch = m.fullName?.toString().toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                            m.mobileNumber?.toString().includes(debouncedSearch);
+      if (!matchesSearch) return false;
+      
+      const isActive = new Date(m.expiryDate) >= new Date();
+      if (statusFilter === 'active' && !isActive) return false;
+      if (statusFilter === 'expired' && isActive) return false;
+      
+      return true;
+    }), [members, debouncedSearch, statusFilter]);
 
   const getImageSrc = (data) => {
     if (!data) return null;
@@ -292,6 +303,13 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard">
+      {/* Liquid Background */}
+      <div className="liquid-bg">
+        <div className="liquid-blob liquid-blob-1"></div>
+        <div className="liquid-blob liquid-blob-2"></div>
+        <div className="liquid-blob liquid-blob-3"></div>
+      </div>
+
       <Navbar />
       <style>{`@keyframes slideInRight { from { opacity:0; transform:translateX(30px); } to { opacity:1; transform:translateX(0); } }`}</style>
       
@@ -304,6 +322,22 @@ const Dashboard = () => {
           <button className="btn btn-primary flex align-center gap-1" onClick={handleAdd} disabled={saving}>
             <FaPlus /> Add Member
           </button>
+        </div>
+
+        {/* Stats Board */}
+        <div className="stats-board">
+          <div className={`stat-card ${statusFilter === 'all' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('all')}>
+            <h3>Total Members</h3>
+            <p className="stat-number">{members.length}</p>
+          </div>
+          <div className={`stat-card ${statusFilter === 'active' ? 'active-filter-success' : ''}`} onClick={() => setStatusFilter('active')}>
+            <h3>Active Members</h3>
+            <p className="stat-number text-success" style={{ color: 'var(--success)' }}>{activeCount}</p>
+          </div>
+          <div className={`stat-card ${statusFilter === 'expired' ? 'active-filter-danger' : ''}`} onClick={() => setStatusFilter('expired')}>
+            <h3>Deactive Members</h3>
+            <p className="stat-number text-danger" style={{ color: 'var(--danger)' }}>{expiredCount}</p>
+          </div>
         </div>
 
         <div className="controls-bar flex justify-between align-center mt-2 mb-2">
