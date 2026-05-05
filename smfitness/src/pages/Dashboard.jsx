@@ -156,6 +156,13 @@ const Dashboard = () => {
 
   // ── Add Member ──
   const handleAddSubmit = useCallback(async (newMemberData) => {
+    // Duplicate check
+    const duplicate = members.find(m => m.mobileNumber === newMemberData.mobileNumber);
+    if (duplicate) {
+      addToast(`Number already exists for ${duplicate.fullName}`, 'error');
+      return;
+    }
+
     setSaving(true);
 
     let paymentScreenshotUrl = null;
@@ -194,10 +201,17 @@ const Dashboard = () => {
       addToast('Member saved successfully!');
     }
     setSaving(false);
-  }, [uploadImage, addToast]);
+  }, [members, uploadImage, addToast]);
 
   // ── Edit Member ──
   const handleEditSubmit = useCallback(async (id, updatedData) => {
+    // Duplicate check (excluding current member)
+    const duplicate = members.find(m => m.mobileNumber === updatedData.mobileNumber && m._id !== id);
+    if (duplicate) {
+      addToast(`Number already exists for ${duplicate.fullName}`, 'error');
+      return;
+    }
+
     setSaving(true);
 
     let paymentScreenshotUrl = updatedData.paymentScreenshot;
@@ -227,7 +241,7 @@ const Dashboard = () => {
       addToast('Member updated successfully!');
     }
     setSaving(false);
-  }, [uploadImage, addToast, fetchMembers]);
+  }, [members, uploadImage, addToast, fetchMembers]);
 
   // ── Delete Member ──
   const requestDelete = useCallback((id) => {
@@ -314,30 +328,30 @@ const Dashboard = () => {
       <style>{`@keyframes slideInRight { from { opacity:0; transform:translateX(30px); } to { opacity:1; transform:translateX(0); } }`}</style>
       
       <div className="container mt-2">
-        <div className="dashboard-header flex justify-between align-center border-bottom pb-1">
-          <div className="flex align-center gap-1">
-            <h2>Fitness Members Dashboard</h2>
-            {(loading || saving) && <div style={{marginTop: '4px'}}><RoseCurveLoader size={20} color="rgba(255, 255, 255, 0.6)" /></div>}
+        <div className="dashboard-header flex-column align-start border-bottom pb-1" style={{ textAlign: 'left', alignItems: 'flex-start' }}>
+          <div className="flex align-center gap-1" style={{ width: '100%', justifyContent: 'flex-start' }}>
+            <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Members Dashboard</h2>
+            {(loading || saving) && <div style={{marginTop: '4px'}}><RoseCurveLoader size={18} color="rgba(255, 255, 255, 0.6)" /></div>}
           </div>
-          <button className="btn btn-primary flex align-center gap-1" onClick={handleAdd} disabled={saving}>
+          
+          <div className="stats-pills" style={{ margin: '8px 0' }}>
+            <div className={`stat-pill ${statusFilter === 'all' ? 'active-all' : ''}`} onClick={() => setStatusFilter('all')}>
+              <span className="pill-label">Total</span>
+              <span className="pill-value">{members.length}</span>
+            </div>
+            <div className={`stat-pill ${statusFilter === 'active' ? 'active-success' : ''}`} onClick={() => setStatusFilter('active')}>
+              <span className="pill-label">Active</span>
+              <span className="pill-value text-success">{activeCount}</span>
+            </div>
+            <div className={`stat-pill ${statusFilter === 'expired' ? 'active-danger' : ''}`} onClick={() => setStatusFilter('expired')}>
+              <span className="pill-label">Deactive</span>
+              <span className="pill-value text-danger">{expiredCount}</span>
+            </div>
+          </div>
+
+          <button className="btn btn-primary flex align-center gap-1 mt-1" onClick={handleAdd} disabled={saving} style={{ padding: '12px 16px', fontSize: '0.95rem', width: '100%', justifyContent: 'center' }}>
             <FaPlus /> Add Member
           </button>
-        </div>
-
-        {/* Stats Board */}
-        <div className="stats-board">
-          <div className={`stat-card ${statusFilter === 'all' ? 'active-filter' : ''}`} onClick={() => setStatusFilter('all')}>
-            <h3>Total Members</h3>
-            <p className="stat-number">{members.length}</p>
-          </div>
-          <div className={`stat-card ${statusFilter === 'active' ? 'active-filter-success' : ''}`} onClick={() => setStatusFilter('active')}>
-            <h3>Active Members</h3>
-            <p className="stat-number text-success" style={{ color: 'var(--success)' }}>{activeCount}</p>
-          </div>
-          <div className={`stat-card ${statusFilter === 'expired' ? 'active-filter-danger' : ''}`} onClick={() => setStatusFilter('expired')}>
-            <h3>Deactive Members</h3>
-            <p className="stat-number text-danger" style={{ color: 'var(--danger)' }}>{expiredCount}</p>
-          </div>
         </div>
 
         <div className="controls-bar flex justify-between align-center mt-2 mb-2">

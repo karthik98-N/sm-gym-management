@@ -18,6 +18,7 @@
 }
 
 .btn-sm {
-  padding: 6px 12px;
+  padding: 3px 10px;
   font-size: 0.85rem;
+  width: auto !important;
 }

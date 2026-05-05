@@ -167,8 +167,10 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Utilities */
 .flex { display: flex; }
+.flex-column { display: flex; flex-direction: column; }
 .justify-between { justify-content: space-between; }
 .align-center { align-items: center; }
+.align-start { align-items: flex-start; }
 .gap-1 { gap: 10px; }
 .gap-2 { gap: 20px; }
 .mt-1 { margin-top: 10px; }
